@@ -1,0 +1,113 @@
+Creating a Pod and Inspecting it
+
+    Create the namespace ckad-prep.
+    $ kubectl create namespace ckad-prep
+    
+    In the namespace ckad-prep create a new Pod named mypod with the image nginx:2.3.5. Expose the port 80.
+     kubectl run mypod --image=nginx:2.3.5 --restart=Never --port=80 --namespace=ckad-prep
+pod/mypod created
+
+    Identify the issue with creating the container. Write down the root cause of issue in a file named pod-error.txt.
+    $ kubectl get pod -n ckad-prep
+NAME    READY   STATUS             RESTARTS   AGE
+mypod   0/1     ImagePullBackOff   0          1m
+
+The list of events can give you a deeper insight.
+
+$ kubectl describe pod -n ckad-prep
+...
+Events:
+  Type     Reason                 Age                 From                         Message
+  ----     ------                 ----                ----                         -------
+  Normal   Scheduled              3m3s                default-scheduler            Successfully assigned mypod to docker-for-desktop
+  Normal   SuccessfulMountVolume  3m2s                kubelet, docker-for-desktop  MountVolume.SetUp succeeded for volume "default-token-jbcl6"
+  Normal   Pulling                84s (x4 over 3m2s)  kubelet, docker-for-desktop  pulling image "nginx:2.3.5"
+  Warning  Failed                 83s (x4 over 3m1s)  kubelet, docker-for-desktop  Failed to pull image "nginx:2.3.5": rpc error: code = Unknown desc = Error response from daemon: manifest for nginx:2.3.5 not found
+  Warning  Failed                 83s (x4 over 3m1s)  kubelet, docker-for-desktop  Error: ErrImagePull
+  Normal   BackOff                69s (x6 over 3m)    kubelet, docker-for-desktop  Back-off pulling image "nginx:2.3.5"
+  Warning  Failed                 69s (x6 over 3m)    kubelet, docker-for-desktop  Error: ImagePullBackOff
+  
+    Change the image of the Pod to nginx:1.15.12.
+    $ kubectl edit pod mypod --namespace=ckad-prep  
+    
+    List the Pod and ensure that the container is running.
+    $ kubectl get pod -n ckad-prep
+    NAME    READY   STATUS    RESTARTS   AGE
+    mypod   1/1     Running   0          14m
+
+    Log into the container and run the ls command. Write down the output. Log out of the container.
+    
+    $ kubectl exec mypod -it -- sh
+    ls 
+        
+    Retrieve the IP address of the Pod mypod.
+    $kubectl get pods -o wide -n ckad-prep
+    NAME      READY   STATUS    RESTARTS   AGE     IP           NODE             NOMINATED NODE   READINESS GATES
+    backend   1/1     Running   0          34m     10.1.4.135   docker-desktop   <none>           <none>
+    mypod     1/1     Running   0          4h49m   10.1.4.134   docker-desktop   <none>           <none>
+    
+    Run a temporary Pod using the image busybox, shell into it and run a wget command against the nginx Pod using port 80.
+    $kubectl run busybox --image=busybox --rm -it --restart=Never -n ckad-prep -- sh
+    wget -O- 10.1.4.134:80
+    Connecting to 10.1.4.134:80 (10.1.4.134:80)
+writing to stdout
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+html { color-scheme: light dark; }
+body { width: 35em; margin: 0 auto;
+font-family: Tahoma, Verdana, Arial, sans-serif; }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
+
+<p>For online documentation and support please refer to
+<a href="http://nginx.org/">nginx.org</a>.<br/>
+Commercial support is available at
+<a href="http://nginx.com/">nginx.com</a>.</p>
+
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+-                    100% |******************************************************************************************************|   615  0:00:00 ETA
+written to stdout
+/ # exit
+pod "busybox" deleted
+   
+    Render the logs of Pod mypod.
+ k logs mypod
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: Getting the checksum of /etc/nginx/conf.d/default.conf
+10-listen-on-ipv6-by-default.sh: info: Enabled listen on IPv6 in /etc/nginx/conf.d/default.conf
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2021/10/16 10:24:44 [notice] 1#1: using the "epoll" event method
+2021/10/16 10:24:44 [notice] 1#1: nginx/1.21.3
+2021/10/16 10:24:44 [notice] 1#1: built by gcc 8.3.0 (Debian 8.3.0-6)
+2021/10/16 10:24:44 [notice] 1#1: OS: Linux 5.4.72-microsoft-standard-WSL2
+2021/10/16 10:24:44 [notice] 1#1: getrlimit(RLIMIT_NOFILE): 1048576:1048576
+2021/10/16 10:24:44 [notice] 1#1: start worker processes
+2021/10/16 10:24:44 [notice] 1#1: start worker process 32
+2021/10/16 10:24:44 [notice] 1#1: start worker process 33
+2021/10/16 10:24:44 [notice] 1#1: start worker process 34
+2021/10/16 10:24:44 [notice] 1#1: start worker process 35
+2021/10/16 10:24:44 [notice] 1#1: start worker process 36
+2021/10/16 10:24:44 [notice] 1#1: start worker process 37
+2021/10/16 10:24:44 [notice] 1#1: start worker process 38
+2021/10/16 10:24:44 [notice] 1#1: start worker process 39
+10.1.4.137 - - [16/Oct/2021:13:06:50 +0000] "GET / HTTP/1.1" 200 615 "-" "Wget" "-"    
+    
+    
+    Delete the Pod and the namespace.
+ k delete pod mypod
+pod "mypod" deleted
+❯ k delete ns ckad-prep
+namespace "ckad-prep" deleted
